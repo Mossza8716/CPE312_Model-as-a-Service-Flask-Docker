@@ -1,5 +1,82 @@
 # CPE312_Model-as-a-Service-Flask-Docker
-# 1.ไฟล์ train_model.py
+
+## 1. โครงสร้างโฟลเดอร์ของโปรเจ็ค
+```
+ml_service/
+├─ app.py
+├─ train_model.py
+├─ requirements.txt
+├─ Dockerfile
+├─ templates/
+│ └─ main.html
+└─ model/
+    └─ model.pkl
+```
+
+### 2.ไฟล์: `train_model.py`
+
+```python
+from sklearn.datasets import fetch_california_housing
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+import joblib, os
+
+data = fetch_california_housing(as_frame=False)
+X, y = data.data, data.target
+
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(Xtr, ytr)
+
+os.makedirs("model", exist_ok=True)
+joblib.dump(model, "model/model.pkl")
+print("บันทึกโมเดลเรียบร้อยที่ model/model.pkl")
+```
+---
+
+### ３.ไฟล์: `app.py`
+
+```python
+from flask import Flask, request, jsonify, render_template
+import joblib, numpy as np, os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "model", "model.pkl")
+model = joblib.load(MODEL_PATH)
+
+FEATURES = ["MedInc","HouseAge","AveRooms","AveBedrms","Population","AveOccup","Latitude","Longitude"]
+
+app = Flask(__name__, template_folder="templates")
+
+@app.get("/health")
+def health():
+    return {"ok": True, "features": FEATURES}
+
+@app.post("/predict")
+def predict():
+    data = request.get_json(silent=True) or {}
+    x = data.get("features")
+    if not x or len(x) != len(FEATURES):
+        return jsonify(error=f"Expected 8 features: {FEATURES}"), 400
+    X = np.array([x], dtype=float)
+    yhat = model.predict(X).tolist()[0]
+    return jsonify(prediction=yhat)
+
+@app.route("/", methods=["GET", "POST"])
+def main():
+    if request.method == "GET":
+        return render_template("main.html")
+    vals = [float(request.form.get(f)) for f in FEATURES]
+    pred = model.predict(np.array([vals])).tolist()[0]
+    return render_template("main.html", prediction=pred)
+
+if __name__ == "__main__":
+    app.run(debug=True)
+```
+
+### 4.ไฟล์: `templates/main.html`
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,3 +211,370 @@
   </script>
 </body>
 </html>
+
+### 5.ไฟล์: `requirements.txt`
+
+```
+flask==3.1.3
+gunicorn==26.2.0
+numpy==2.4.6
+scikit-learn==1.9.1
+joblib==1.6.0
+pandas==3.1.1
+```
+
+### 6.ไฟล์: `Dockerfile`
+
+```
+# Base image ที่ใช้ Python 3.11 แบบขนาดเล็ก
+FROM python:3.11-slim
+
+# สร้างโฟลเดอร์ทำงานภายใน container
+WORKDIR /app
+
+# คัดลอก requirements.txt และติดตั้ง dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# คัดลอกไฟล์โปรเจกต์ทั้งหมดเข้า container
+COPY . .
+
+# สร้างโมเดล (train model) ตอน build image
+RUN python train_model.py
+
+# เปิด port 5000 สำหรับ Flask
+EXPOSE 5000
+
+# สั่งให้รัน Flask app ผ่าน Gunicorn (production server)
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "app:app"]
+
+```
+---
+
+### 7.ไฟล์: `Dockerfile`
+
+```
+from sklearn.datasets import fetch_california_housing
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+import joblib, os
+
+data = fetch_california_housing(as_frame=False)
+X, y = data.data, data.target
+
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(Xtr, ytr)
+
+os.makedirs("model", exist_ok=True)
+joblib.dump(model, "model/model.pkl")
+print("บันทึกโมเดลเรียบร้อยที่ model/model.pkl")
+```
+
+### 8.ไฟล์: README
+
+```
+# ML Deployment Lab: Model as a Service with Flask and Docker
+
+> โปรเจกต์ตัวอย่างสำหรับรายวิชา CPE312 Data Science\
+> สาธิตการนำ Machine Learning Model มาพัฒนาเป็นบริการ (Model as a Service:
+> MaaS) ด้วย Flask API และ Docker
+
+## 1. Project Overview
+
+โปรเจกต์นี้ใช้ชุดข้อมูล **California Housing** เพื่อฝึกโมเดล **Random Forest
+Regression** สำหรับประมาณค่ามัธยฐานของมูลค่าบ้านในพื้นที่ จากนั้นบันทึกโมเดลด้วย Joblib
+และสร้าง Flask Application เพื่อรับข้อมูลจากผู้ใช้และส่งผลการทำนายกลับในรูปแบบ JSON
+หรือแสดงผลผ่านหน้าเว็บไซต์
+
+ระบบสามารถทำงานได้ 2 รูปแบบ
+
+1.  **Local mode:** รัน Flask ด้วย Python ในเครื่อง
+2.  **Docker mode:** สร้าง Docker Image และรัน Application ภายใน Container
+    โดยใช้ Gunicorn
+
+> หมายเหตุ: ผลลัพธ์เป็นค่าประมาณจากโมเดลเพื่อการศึกษา
+> ไม่ใช่ราคาประเมินอสังหาริมทรัพย์อย่างเป็นทางการ
+
+## 2. Technologies
+
+-   Python 3.11
+-   Flask --- Web Application และ REST API
+-   scikit-learn --- Dataset และ Random Forest Regression
+-   NumPy --- จัดการข้อมูลตัวเลข
+-   Joblib --- บันทึกและโหลดโมเดล
+-   Pandas --- เครื่องมือจัดการข้อมูล
+-   Gunicorn --- WSGI server สำหรับรัน Flask ใน Container
+-   Docker --- สร้าง Image และรัน Container
+-   HTML, CSS และ JavaScript --- ส่วนติดต่อผู้ใช้
+
+## 3. Dataset and Features
+
+ใช้ California Housing Dataset จาก
+`sklearn.datasets.fetch_california_housing`
+
+โมเดลรับข้อมูลเข้า 8 Features ตามลำดับต่อไปนี้
+
+  -------------------------------------------------------------------------------
+                          ลำดับ Feature               ความหมาย
+  ---------------------------- --------------------- ----------------------------
+                             1 `MedInc`              รายได้มัธยฐานของครัวเรือนในพื้นที่
+                                                     (หน่วยตาม Dataset: 10,000
+                                                     ดอลลาร์สหรัฐ)
+
+                             2 `HouseAge`            อายุบ้านมัธยฐานในพื้นที่
+
+                             3 `AveRooms`            จำนวนห้องเฉลี่ยต่อครัวเรือน
+
+                             4 `AveBedrms`           จำนวนห้องนอนเฉลี่ยต่อครัวเรือน
+
+                             5 `Population`          จำนวนประชากรในพื้นที่
+
+                             6 `AveOccup`            จำนวนผู้อยู่อาศัยเฉลี่ยต่อครัวเรือน
+
+                             7 `Latitude`            ละติจูด
+
+                             8 `Longitude`           ลองจิจูด
+  -------------------------------------------------------------------------------
+
+**Target:** `MedHouseVal` --- ค่ามัธยฐานของมูลค่าบ้าน หน่วยเป็น 100,000
+ดอลลาร์สหรัฐ ตามนิยามของ Dataset
+
+## 4. Project Structure
+
+``` text
+ml_service/
+├── app.py
+├── train_model.py
+├── requirements.txt
+├── Dockerfile
+├── .dockerignore
+├── .gitignore
+├── README.md
+├── templates/
+│   └── main.html
+└── model/
+    └── model.pkl       # สร้างจาก train_model.py; ไม่จำเป็นต้อง commit หาก Docker ฝึกโมเดลตอน build
+```
+
+## 5. Requirements
+
+ติดตั้งโปรแกรมต่อไปนี้ก่อนเริ่มใช้งาน
+
+-   Python 3.11
+-   Visual Studio Code (หรือ Editor อื่น)
+-   Git
+-   Docker Desktop (สำหรับการรันด้วย Docker)
+
+ตรวจสอบเวอร์ชัน Python และ Docker ได้ด้วยคำสั่ง
+
+``` powershell
+python --version
+docker --version
+```
+
+## 6. Run Locally (Windows PowerShell)
+
+เปิด PowerShell ในโฟลเดอร์โปรเจกต์
+
+### 6.1 Create and activate virtual environment
+
+``` powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+หาก PowerShell ป้องกันการรันสคริปต์ ให้ใช้คำสั่งต่อไปนี้ในหน้าต่าง Terminal ปัจจุบัน
+แล้วลอง Activate อีกครั้ง
+
+``` powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+เมื่อเปิดใช้งานสำเร็จ จะเห็น `(.venv)` นำหน้าบรรทัดคำสั่ง
+
+### 6.2 Install dependencies
+
+``` powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+### 6.3 Train the model
+
+``` powershell
+python train_model.py
+```
+
+สคริปต์จะดาวน์โหลด Dataset (ต้องเชื่อมต่ออินเทอร์เน็ตในครั้งแรก) แบ่งข้อมูลเป็นชุด Train
+และ Test ฝึก Random Forest Regression ประเมินค่า R² และบันทึกโมเดลไว้ที่
+`model/model.pkl`
+
+### 6.4 Start Flask
+
+``` powershell
+python app.py
+```
+
+เปิดเว็บเบราว์เซอร์ที่:
+
+-   http://127.0.0.1:5000/
+
+หยุดเซิร์ฟเวอร์ด้วย `Ctrl + C`
+
+## 7. API Endpoints
+
+### `GET /health`
+
+ตรวจสอบสถานะ Application และรายชื่อ Features
+
+ตัวอย่าง:
+
+``` powershell
+Invoke-RestMethod -Uri http://127.0.0.1:5000/health -Method Get
+```
+
+### `POST /predict`
+
+รับ JSON ที่มี `features` เป็น Array ตัวเลข 8 ค่า โดยต้องเรียงตามลำดับ Features
+ในหัวข้อ Dataset and Features
+
+ตัวอย่าง PowerShell:
+
+``` powershell
+$body = @{
+    features = @(8.3, 25.0, 6.0, 1.0, 1200, 3.0, 34.2, -118.3)
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+    -Uri http://127.0.0.1:5000/predict `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $body
+```
+
+ตัวอย่างรูปแบบ Response:
+
+``` json
+{
+  "prediction": 4.0
+}
+```
+
+ตัวเลขข้างต้นเป็นเพียงตัวอย่างรูปแบบการตอบกลับ ค่าจริงขึ้นอยู่กับโมเดลที่ฝึกและข้อมูลที่ส่งเข้าไป
+
+ค่า `prediction` มีหน่วยเป็น 100,000 ดอลลาร์สหรัฐ หากต้องการแสดงเป็นดอลลาร์สหรัฐ
+ให้คูณค่าที่ได้ด้วย 100,000
+
+## 8. Run with Docker
+
+ตรวจสอบก่อนว่า Docker Desktop เปิดใช้งานอยู่ และ PowerShell อยู่ในโฟลเดอร์เดียวกับ
+`Dockerfile` และ `requirements.txt`
+
+### 8.1 Build Docker Image
+
+``` powershell
+docker build -t ds-ml-service .
+```
+
+ใน Dockerfile ของโปรเจกต์นี้มีขั้นตอนติดตั้ง dependencies และเรียก
+`train_model.py` ระหว่างการ Build ดังนั้นการ Build
+ครั้งแรกต้องใช้อินเทอร์เน็ตเพื่อดาวน์โหลด Base Image และ Dataset
+
+ตรวจสอบ Image:
+
+``` powershell
+docker images
+```
+
+### 8.2 Run Container
+
+``` powershell
+docker run --rm -p 5000:5000 ds-ml-service
+```
+
+เปิดเว็บเบราว์เซอร์ที่:
+
+-   http://127.0.0.1:5000/
+-   http://127.0.0.1:5000/health
+
+หยุด Container ด้วย `Ctrl + C`
+
+หาก Port 5000 ถูกใช้งานอยู่ สามารถเปลี่ยน Port ฝั่งเครื่อง Host ได้ เช่น:
+
+``` powershell
+docker run --rm -p 8080:5000 ds-ml-service
+```
+
+แล้วเปิด http://127.0.0.1:8080/
+
+## 9. Troubleshooting
+
+  ----------------------------------------------------------------------------------------------
+  อาการ                                            แนวทางตรวจสอบ/แก้ไข
+  ------------------------------------------------ ---------------------------------------------
+  `ModuleNotFoundError: No module named 'flask'`   เปิดใช้งาน `.venv` และติดตั้งด้วย
+                                                   `python -m pip install -r requirements.txt`
+                                                   ตรวจสอบ Python Interpreter ใน VS Code ให้เป็น
+                                                   `.venv\Scripts\python.exe`
+
+  `requirements.txt: not found` ระหว่าง Docker      ตรวจสอบว่าไฟล์อยู่ในโฟลเดอร์เดียวกับ Dockerfile
+  Build                                            และไม่ได้ถูกระบุไว้ใน `.dockerignore`; รัน `dir`
+                                                   และ `Test-Path .\requirements.txt`
+
+  `model/model.pkl` ไม่พบ                           รัน `python train_model.py` ก่อนเริ่ม Flask ใน
+                                                   Local mode
+
+  `TemplateNotFound: main.html`                    ตรวจสอบว่าไฟล์อยู่ที่ `templates/main.html`
+
+  Docker ติดต่อ Engine ไม่ได้                          เปิด Docker Desktop และรอให้ Engine พร้อมใช้งาน
+
+  Port 5000 ถูกใช้งาน                                ใช้ `-p 8080:5000` แล้วเปิด
+                                                   `http://127.0.0.1:8080/`
+
+  Docker หา Image `ds-ml-service` ไม่พบ             Build Image ให้สำเร็จก่อนด้วย
+                                                   `docker build -t ds-ml-service .`
+  ----------------------------------------------------------------------------------------------
+
+## 10. Notes for Development and Submission
+
+ก่อนส่งงานควรตรวจสอบว่า:
+
+-   [ ] `train_model.py` ทำงานและสร้าง `model/model.pkl` ได้
+-   [ ] `app.py` เปิดหน้าเว็บไซต์ได้
+-   [ ] `GET /health` ตอบกลับสถานะระบบ
+-   [ ] `POST /predict` รับ Features 8 ค่าและส่ง Prediction กลับ
+-   [ ] Docker Image Build สำเร็จ
+-   [ ] Docker Container เปิดเว็บไซต์และ API ได้
+-   [ ] `README.md` และ Source Code อยู่ใน Repository
+-   [ ] ไม่มีไฟล์ลับ เช่น `.env`, รหัสผ่าน หรือ Token ถูก commit
+-   [ ] เพิ่มภาพหน้าจอผลการทดสอบ หากผู้สอนกำหนดให้ส่ง
+
+### Git commands
+
+หาก Clone Repository ของรายวิชามาแล้ว ให้ทำงานภายในโฟลเดอร์ Repository นั้น
+จากนั้นตรวจสอบและบันทึกการเปลี่ยนแปลง:
+
+``` powershell
+git status
+git add .
+git commit -m "Complete ML deployment lab"
+git push
+```
+
+ตรวจสอบ Branch และ Remote ด้วย `git branch` และ `git remote -v` ก่อน Push
+หาก Repository กำหนด Branch หรือขั้นตอนส่งงานไว้ต่างจากนี้ ให้ทำตามคำสั่งของผู้สอน
+
+## 11. Author
+
+-   Name: **\[Your Name\]**
+-   Course: **CPE312 Data Science**
+-   Project: **ML Deployment Lab --- Model as a Service**
+
+------------------------------------------------------------------------
+
+**Educational project:** พัฒนาขึ้นเพื่อศึกษา Machine Learning Model Training,
+Flask API และ Docker-based Deployment
+```
