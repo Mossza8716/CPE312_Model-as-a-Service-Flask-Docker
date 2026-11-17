@@ -1,16 +1,19 @@
 # CPE312_Model-as-a-Service-Flask-Docker
 
 ## 1. โครงสร้างโฟลเดอร์ของโปรเจ็ค
-```
+``` text
 ml_service/
-├─ app.py
-├─ train_model.py
-├─ requirements.txt
-├─ Dockerfile
-├─ templates/
-│ └─ main.html
-└─ model/
-    └─ model.pkl
+├── app.py
+├── train_model.py
+├── requirements.txt
+├── Dockerfile
+├── .dockerignore
+├── .gitignore
+├── README.md
+├── templates/
+│   └── main.html
+└── model/
+    └── model.pkl       # สร้างจาก train_model.py; ไม่จำเป็นต้อง commit หาก Docker ฝึกโมเดลตอน build
 ```
 
 ### 2.ไฟล์: `train_model.py`
@@ -77,6 +80,7 @@ if __name__ == "__main__":
 
 ### 4.ไฟล์: `templates/main.html`
 
+```
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -212,6 +216,8 @@ if __name__ == "__main__":
 </body>
 </html>
 
+```
+
 ### 5.ไฟล์: `requirements.txt`
 
 ```
@@ -281,7 +287,7 @@ print("บันทึกโมเดลเรียบร้อยที่ mod
 > สาธิตการนำ Machine Learning Model มาพัฒนาเป็นบริการ (Model as a Service:
 > MaaS) ด้วย Flask API และ Docker
 
-## 1. Project Overview
+ 1. Project Overview
 
 โปรเจกต์นี้ใช้ชุดข้อมูล **California Housing** เพื่อฝึกโมเดล **Random Forest
 Regression** สำหรับประมาณค่ามัธยฐานของมูลค่าบ้านในพื้นที่ จากนั้นบันทึกโมเดลด้วย Joblib
@@ -297,7 +303,7 @@ Regression** สำหรับประมาณค่ามัธยฐาน�
 > หมายเหตุ: ผลลัพธ์เป็นค่าประมาณจากโมเดลเพื่อการศึกษา
 > ไม่ใช่ราคาประเมินอสังหาริมทรัพย์อย่างเป็นทางการ
 
-## 2. Technologies
+2. Technologies
 
 -   Python 3.11
 -   Flask --- Web Application และ REST API
@@ -309,7 +315,7 @@ Regression** สำหรับประมาณค่ามัธยฐาน�
 -   Docker --- สร้าง Image และรัน Container
 -   HTML, CSS และ JavaScript --- ส่วนติดต่อผู้ใช้
 
-## 3. Dataset and Features
+ 3. Dataset and Features
 
 ใช้ California Housing Dataset จาก
 `sklearn.datasets.fetch_california_housing`
@@ -340,23 +346,6 @@ Regression** สำหรับประมาณค่ามัธยฐาน�
 
 **Target:** `MedHouseVal` --- ค่ามัธยฐานของมูลค่าบ้าน หน่วยเป็น 100,000
 ดอลลาร์สหรัฐ ตามนิยามของ Dataset
-
-## 4. Project Structure
-
-``` text
-ml_service/
-├── app.py
-├── train_model.py
-├── requirements.txt
-├── Dockerfile
-├── .dockerignore
-├── .gitignore
-├── README.md
-├── templates/
-│   └── main.html
-└── model/
-    └── model.pkl       # สร้างจาก train_model.py; ไม่จำเป็นต้อง commit หาก Docker ฝึกโมเดลตอน build
-```
 
 ## 5. Requirements
 
@@ -569,7 +558,7 @@ git push
 
 ## 11. Author
 
--   Name: **\[Your Name\]**
+-   Name: **นายกฤตณัฐ สุดใจ**
 -   Course: **CPE312 Data Science**
 -   Project: **ML Deployment Lab --- Model as a Service**
 
